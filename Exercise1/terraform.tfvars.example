@@ -1,0 +1,50 @@
+project_name                = "exercise1"
+environment                 = "lab"
+state_bucket_name           = "cloud-exercises-terraform-state"
+state_bucket_force_destroy  = false
+aws_region                  = "us-east-1"
+
+aws_config = {
+  name_prefix              = "exercise1"
+  vpc_cidr_block           = "10.0.0.0/16"
+  public_subnet_cidr_block = "10.0.1.0/24"
+  instance_type            = "t2.micro"
+  ami_id                   = "ami-0c02fb55956c7d316"
+  key_name                 = null
+  ssh_public_key           = "ssh-rsa AAAA...ReplaceWithValidKey"
+  allowed_ssh_cidr_blocks  = ["0.0.0.0/0"]
+  iam_role_name            = "exercise1-ec2-role"
+  iam_inline_policy_json   = null
+  enable_public_ip         = true
+  root_volume_size_gb      = 20
+  tags = {
+    environment = "lab"
+  }
+}
+
+azure_config = {
+  name_prefix                  = "exercise1"
+  resource_group_name          = "rg-exercise1"
+  location                     = "eastus"
+  vnet_address_space           = ["10.0.0.0/16"]
+  subnet_address_prefix        = "10.0.1.0/24"
+  vm_size                      = "Standard_B2s"
+  admin_username               = "azureuser"
+  admin_ssh_public_key         = "ssh-rsa AAAA...ReplaceWithValidKey"
+  allowed_ssh_source_addresses = ["0.0.0.0/0"]
+  image_reference = {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts"
+    version   = "latest"
+  }
+  enable_public_ip = true
+  os_disk_size_gb  = 64
+  tags = {
+    environment = "lab"
+  }
+}
+
+tags = {
+  project     = "cloud-exercise"
+}
