@@ -51,7 +51,7 @@ variable "subnet_newbits" {
 variable "launch_template_instance_type" {
   description = "Instance type for the Auto Scaling Group launch template."
   type        = string
-  default     = "t3.micro"
+  default     = "t2.micro"
 }
 
 variable "launch_template_ami_id" {
