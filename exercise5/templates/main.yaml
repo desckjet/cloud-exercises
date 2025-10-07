@@ -1,0 +1,111 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Highly available and secure VPC with nested stacks for networking and compute.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Short name used for tagging resources (e.g. dev, staging, prod).
+    AllowedPattern: '^[a-zA-Z][a-zA-Z0-9\-]{1,14}$'
+    ConstraintDescription: Must start with a letter and be 2-15 characters (letters, numbers, hyphen).
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: CIDR block for the VPC.
+  PublicSubnetCidrs:
+    Type: CommaDelimitedList
+    Default: 10.0.0.0/24,10.0.1.0/24
+    Description: CIDR blocks for the public subnets (two values).
+  PrivateSubnetCidrs:
+    Type: CommaDelimitedList
+    Default: 10.0.10.0/24,10.0.11.0/24
+    Description: CIDR blocks for the private subnets (two values).
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: EC2 instance type for the Auto Scaling Group.
+  KeyName:
+    Type: String
+    Description: Optional SSH key pair name for bastion/debug access. Leave blank to disable SSH key association.
+    Default: ''
+    AllowedPattern: '(^$)|(^[A-Za-z0-9\-\_\.]+$)'
+    ConstraintDescription: Must be blank or a valid key pair name.
+  SSHCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: CIDR block allowed to reach the EC2 instances via SSH.
+    AllowedPattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$'
+    ConstraintDescription: Must be a valid IPv4 CIDR block.
+  AmiId:
+    Type: String
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
+    Description: AMI identifier for the Auto Scaling instances. Accepts either an AMI ID (ami-*) or an SSM parameter path.
+  DesiredCapacity:
+    Type: Number
+    Default: 2
+    MinValue: 2
+    MaxValue: 6
+    Description: Desired number of instances in the Auto Scaling Group.
+  MinSize:
+    Type: Number
+    Default: 2
+    MinValue: 2
+    MaxValue: 6
+    Description: Minimum number of instances in the Auto Scaling Group.
+  MaxSize:
+    Type: Number
+    Default: 4
+    MinValue: 2
+    MaxValue: 10
+    Description: Maximum number of instances in the Auto Scaling Group.
+
+Resources:
+  NetworkingStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: nested/networking.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        VpcCidr: !Ref VpcCidr
+        PublicSubnetCidrs: !Join [',', !Ref PublicSubnetCidrs]
+        PrivateSubnetCidrs: !Join [',', !Ref PrivateSubnetCidrs]
+        SSHCidr: !Ref SSHCidr
+
+  ComputeStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: NetworkingStack
+    Properties:
+      TemplateURL: nested/compute.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        VpcId: !GetAtt NetworkingStack.Outputs.VpcId
+        PublicSubnetIds: !GetAtt NetworkingStack.Outputs.PublicSubnetIds
+        PrivateSubnetIds: !GetAtt NetworkingStack.Outputs.PrivateSubnetIds
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyName
+        SSHCidr: !Ref SSHCidr
+        AmiId: !Ref AmiId
+        DesiredCapacity: !Ref DesiredCapacity
+        MinSize: !Ref MinSize
+        MaxSize: !Ref MaxSize
+
+Outputs:
+  VpcId:
+    Description: ID of the created VPC.
+    Value: !GetAtt NetworkingStack.Outputs.VpcId
+    Export:
+      Name: !Sub ${EnvironmentName}:VpcId
+  PublicSubnets:
+    Description: Comma separated list of public subnet IDs.
+    Value: !GetAtt NetworkingStack.Outputs.PublicSubnetIds
+  PrivateSubnets:
+    Description: Comma separated list of private subnet IDs.
+    Value: !GetAtt NetworkingStack.Outputs.PrivateSubnetIds
+  LoadBalancerDNSName:
+    Description: DNS name for the application load balancer.
+    Value: !GetAtt ComputeStack.Outputs.AlbDnsName
+  AlbSecurityGroupId:
+    Description: Security group ID assigned to the ALB.
+    Value: !GetAtt ComputeStack.Outputs.AlbSecurityGroupId
+  InstanceSecurityGroupId:
+    Description: Security group ID assigned to EC2 instances.
+    Value: !GetAtt ComputeStack.Outputs.InstanceSecurityGroupId

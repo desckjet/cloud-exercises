@@ -1,0 +1,254 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Compute, load balancing, and IAM resources for the HA VPC exercise.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Short name used for tagging resources (e.g. dev, staging, prod).
+    AllowedPattern: '^[a-zA-Z][a-zA-Z0-9\-]{1,14}$'
+    ConstraintDescription: Must start with a letter and be 2-15 characters (letters, numbers, hyphen).
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC where compute resources are deployed.
+  PublicSubnetIds:
+    Type: CommaDelimitedList
+    Description: IDs of the public subnets for the Application Load Balancer.
+  PrivateSubnetIds:
+    Type: CommaDelimitedList
+    Description: IDs of the private subnets for the Auto Scaling Group.
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: EC2 instance type for the Auto Scaling Group.
+  KeyName:
+    Type: String
+    Description: Optional SSH key pair name for bastion/debug access. Leave blank to disable SSH key association.
+    Default: ''
+    AllowedPattern: '(^$)|(^[A-Za-z0-9\-\_\.]+$)'
+    ConstraintDescription: Must be blank or a valid key pair name.
+  SSHCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: CIDR block allowed to reach the EC2 instances via SSH.
+    AllowedPattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$'
+    ConstraintDescription: Must be a valid IPv4 CIDR block.
+  AmiId:
+    Type: String
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
+    Description: AMI identifier for the Auto Scaling instances. Accepts either an AMI ID (ami-*) or an SSM parameter path.
+  DesiredCapacity:
+    Type: Number
+    Default: 2
+    MinValue: 2
+    MaxValue: 6
+    Description: Desired number of instances in the Auto Scaling Group.
+  MinSize:
+    Type: Number
+    Default: 2
+    MinValue: 2
+    MaxValue: 6
+    Description: Minimum number of instances in the Auto Scaling Group.
+  MaxSize:
+    Type: Number
+    Default: 4
+    MinValue: 2
+    MaxValue: 10
+    Description: Maximum number of instances in the Auto Scaling Group.
+
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+  UseDirectAmi: !Equals
+    - !Select [0, !Split ['-', !Ref AmiId]]
+    - ami
+
+Resources:
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP from the internet to the ALB.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-alb-sg
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow traffic from ALB and limited SSH access.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHCidr
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-app-sg
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  InstanceProfileRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Path: /
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-ec2-role
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref InstanceProfileRole
+
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !If
+          - UseDirectAmi
+          - !Ref AmiId
+          - !Sub '{{resolve:ssm:${AmiId}}}'
+        InstanceType: !Ref InstanceType
+        SecurityGroupIds:
+          - !Ref InstanceSecurityGroup
+        KeyName: !If [HasKeyName, !Ref KeyName, !Ref "AWS::NoValue"]
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpTokens: required
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -euxo pipefail
+            if command -v dnf >/dev/null 2>&1; then
+              dnf -y update
+              dnf install -y nginx
+            else
+              yum -y update
+              if command -v amazon-linux-extras >/dev/null 2>&1; then
+                amazon-linux-extras enable nginx1
+                amazon-linux-extras install -y nginx1
+              fi
+              yum -y install nginx || true
+            fi
+            systemctl enable --now amazon-ssm-agent
+            systemctl enable --now nginx
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub ${EnvironmentName}-web
+              - Key: Environment
+                Value: !Ref EnvironmentName
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub ${EnvironmentName}-web
+              - Key: Environment
+                Value: !Ref EnvironmentName
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${EnvironmentName}-alb
+      Scheme: internet-facing
+      Type: application
+      SecurityGroups:
+        - !Ref AlbSecurityGroup
+      Subnets: !Ref PublicSubnetIds
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-alb
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VpcId
+      Port: 80
+      Protocol: HTTP
+      TargetType: instance
+      HealthCheckPath: /
+      Matcher:
+        HttpCode: 200
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-tg
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier: !Ref PrivateSubnetIds
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+      DesiredCapacity: !Ref DesiredCapacity
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 60
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-web
+          PropagateAtLaunch: true
+
+Outputs:
+  AlbDnsName:
+    Description: DNS name for the application load balancer.
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+  AlbSecurityGroupId:
+    Description: Security group ID assigned to the ALB.
+    Value: !Ref AlbSecurityGroup
+  InstanceSecurityGroupId:
+    Description: Security group ID assigned to EC2 instances.
+    Value: !Ref InstanceSecurityGroup

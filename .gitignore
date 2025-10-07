@@ -18,3 +18,5 @@ terraform.rc
 .vscode/
 .idea/
 .DS_Store
+
+exercise5/build/

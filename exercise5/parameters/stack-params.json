@@ -1,0 +1,38 @@
+[
+  {
+    "ParameterKey": "EnvironmentName",
+    "ParameterValue": "exercise5"
+  },
+  {
+    "ParameterKey": "VpcCidr",
+    "ParameterValue": "10.20.0.0/16"
+  },
+  {
+    "ParameterKey": "PublicSubnetCidrs",
+    "ParameterValue": "10.20.0.0/24,10.20.1.0/24"
+  },
+  {
+    "ParameterKey": "PrivateSubnetCidrs",
+    "ParameterValue": "10.20.10.0/24,10.20.11.0/24"
+  },
+  {
+    "ParameterKey": "InstanceType",
+    "ParameterValue": "t2.micro"
+  },
+  {
+    "ParameterKey": "SSHCidr",
+    "ParameterValue": "0.0.0.0/0"
+  },
+  {
+    "ParameterKey": "DesiredCapacity",
+    "ParameterValue": "2"
+  },
+  {
+    "ParameterKey": "MinSize",
+    "ParameterValue": "2"
+  },
+  {
+    "ParameterKey": "MaxSize",
+    "ParameterValue": "4"
+  }
+]
