@@ -1,0 +1,24 @@
+aws_region = "us-east-1"
+name_prefix = "exercise4"
+
+github_owner      = "your-github-username"
+github_repository = "your-nginx-repo"
+github_branch     = "main"
+
+# Provide an inline buildspec string or set to null to use buildspec.yml from the repository.
+codebuild_buildspec = null
+
+tags = {
+  Environment = "dev"
+  Project     = "exercise4"
+}
+
+# vpc_cidr_block        = "10.0.0.0/16"
+# subnet_newbits        = 4
+# az_count              = 2
+# compute_instance_type = "t2.micro"
+# asg_min_size          = 2
+# asg_max_size          = 2
+# asg_desired_capacity  = 2
+# alb_health_check_path = "/"
+# compute_ami_id      = "ami-xxxxxxxx" # Optional override for targets
