@@ -5,7 +5,7 @@ A collection of practical cloud infrastructure exercises using AWS services, Ter
 ## Exercises Overview
 
 ### Exercise 1 - Multi-Cloud Instance Deployment
-Deploy virtual machines across multiple cloud providers (AWS, Azure, GCP) using Terraform modules for cross-cloud compatibility and standardized infrastructure patterns.
+Deploy virtual machines across multiple cloud providers (AWS, Azure) using Terraform modules for cross-cloud compatibility and standardized infrastructure patterns.
 
 ### Exercise 2 - Auto Scaling Web Application with Monitoring
 Implement a scalable web application on AWS with Auto Scaling Groups, Application Load Balancer, and CloudWatch monitoring for automatic scaling based on CPU metrics.
