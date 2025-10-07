@@ -82,7 +82,7 @@ exercise5/
 
 ## Security Considerations
 
-- Keep `SSHCidr` restricted to necessary administrative addresses (ideally your corporate IP or VPN range).
+- Set `SSHCidr` restricted to necessary administrative addresses (ideally your corporate IP or VPN range).
 - The Launch Template enforces IMDSv2 and attaches the managed role `AmazonSSMManagedInstanceCore` for access via AWS Systems Manager Session Manager instead of exposing SSH.
 - NACLs separate public and private traffic, closing unused ports and limiting access to internal resources.
 
